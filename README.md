@@ -1,0 +1,72 @@
+# cache_memory_cleaner
+
+A macOS cache/storage cleanup script, distilled from a real disk-space
+recovery session (99% full → healthy). It only touches things that are
+provably regenerable or provably unused — it will not delete a live
+database, a running app's active state, or any data it can't verify is
+safe to remove.
+
+## Usage
+
+```bash
+git clone https://github.com/herrrickshaw/cache_memory_cleaner.git
+cd cache_memory_cleaner
+chmod +x cache_memory_cleaner.sh
+
+./cache_memory_cleaner.sh report          # disk usage + top consumers, no changes
+./cache_memory_cleaner.sh clean-caches    # clear browser + package-manager caches
+./cache_memory_cleaner.sh clean-packages  # brew autoremove/cleanup, npm cache
+./cache_memory_cleaner.sh find-dormant    # REPORT (not remove) unused tools/casks
+./cache_memory_cleaner.sh git-gc [path]   # compact a git repo's objects
+./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages
+```
+
+Set `DRY_RUN=1` to preview every command without deleting anything:
+
+```bash
+DRY_RUN=1 ./cache_memory_cleaner.sh clean-caches
+```
+
+## What it cleans
+
+- Browser render caches (Chrome, Brave, Firefox) — apps rebuild these on demand
+- Chrome's redownloadable on-device ML model caches (`OptGuideOnDeviceModel`,
+  `screen_ai`, etc.) and per-profile Service Worker/GPU caches — **not**
+  `IndexedDB`, `Extensions`, or `Local Storage`, which can hold real data
+- Homebrew, pip, npm, uv, and gem download caches
+- Orphaned Homebrew dependencies (`brew autoremove`) and old formula versions
+  (`brew cleanup`)
+
+## What it only *reports*, never removes automatically
+
+- `find-dormant`: Homebrew leaves, ghost casks (registered but the `.app` was
+  deleted by hand), Application Support directories with zero recent file
+  activity, and never-started Podman VMs. All of these need a human decision
+  — the script won't guess whether you still need a tool.
+- `git-gc`: branches with no upstream (their commits exist nowhere but your
+  disk) get listed as a warning before the `gc` runs. `git gc` itself is safe
+  regardless of push status — it compacts *reachable* objects, it never
+  deletes branch history — but it's still worth knowing which branches have
+  no off-machine backup.
+
+## Lessons baked into this tool
+
+- **Verify then evict.** Never delete a local copy because you *think* it's
+  backed up — check the remote copy's byte size matches first.
+- **Archive many-small-files directories before uploading.** Cloud APIs
+  (Dropbox, Google Drive) throttle per-request, not per-byte. A directory
+  with tens of thousands of small files can take hours to sync raw; the same
+  data tarred into one archive uploads in minutes.
+- **A cask being "installed" doesn't mean the app exists.** Check
+  `/Applications` against `brew info --cask <name>`'s real app name — apps
+  deleted by hand outside of Homebrew leave a stale registry entry.
+- **A VM/container runtime that shows "never started" is pure waste.**
+  `podman machine list` (or the equivalent for your container tool) will
+  tell you if a multi-GB disk allocation was set up and never touched.
+- **PEP 668 needs `--break-system-packages` for in-place upgrades** of
+  packages already living in Homebrew's protected Python site-packages —
+  the same method they were originally installed with, not a workaround.
+
+## License
+
+MIT
