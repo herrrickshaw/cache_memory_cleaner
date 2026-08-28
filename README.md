@@ -18,7 +18,8 @@ chmod +x cache_memory_cleaner.sh
 ./cache_memory_cleaner.sh clean-packages  # brew autoremove/cleanup, npm cache
 ./cache_memory_cleaner.sh find-dormant    # REPORT (not remove) unused tools/casks
 ./cache_memory_cleaner.sh git-gc [path]   # compact a git repo's objects
-./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages
+./cache_memory_cleaner.sh trim-vms        # prune + fstrim Podman VM disk images
+./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages + trim-vms
 ```
 
 Set `DRY_RUN=1` to preview every command without deleting anything:
@@ -66,6 +67,11 @@ DRY_RUN=1 ./cache_memory_cleaner.sh clean-caches
 - **PEP 668 needs `--break-system-packages` for in-place upgrades** of
   packages already living in Homebrew's protected Python site-packages —
   the same method they were originally installed with, not a workaround.
+- **Pruning inside a VM doesn't shrink its host-side disk image.** A guest
+  OS marks freed blocks internally, but the host's sparse file only shrinks
+  once something issues a real discard. `podman system prune` freeing 1.76GB
+  *inside* a VM left its 10GB host footprint untouched; `fstrim -av` over
+  `podman machine ssh` afterward dropped it to 2GB, machine still fully usable.
 
 ## License
 

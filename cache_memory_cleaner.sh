@@ -116,6 +116,27 @@ cmd_clean_packages() {
   fi
 }
 
+# ── trim-vms ──────────────────────────────────────────────────────────────
+# Container/VM disk images (Podman, similar tools) are sparse files on the
+# host, but pruning images/volumes INSIDE the VM does not shrink the host
+# file — the guest OS marks blocks free, but nothing tells the host-side
+# sparse file to release them. `fstrim` inside the VM issues the actual
+# discard, which the host sparse file then honors. Learned from a real case:
+# a Podman VM's host footprint didn't move after `system prune` freed 1.76GB
+# inside it; `fstrim -av` over SSH dropped the host file from 10G to 2G with
+# the machine still fully usable afterward.
+cmd_trim_vms() {
+  if command -v podman >/dev/null 2>&1 && podman machine list --format "{{.Name}}" 2>/dev/null | grep -q .; then
+    log "=== podman: prune unused images/volumes, then fstrim to reclaim host disk ==="
+    run "podman machine start"
+    run "podman system prune -a --volumes -f"
+    run 'podman machine ssh "sudo fstrim -av"'
+    run "podman machine stop"
+  else
+    log "no podman machine found, skipping"
+  fi
+}
+
 # ── find-dormant ─────────────────────────────────────────────────────────
 # Report-only: never auto-removes. Flags brew leaves and Application
 # Support directories with zero file modifications in the last N days as
@@ -181,15 +202,18 @@ case "${1:-}" in
   clean-packages) cmd_clean_packages ;;
   find-dormant)  cmd_find_dormant "${2:-30}" ;;
   git-gc)        cmd_git_gc "${2:-.}" ;;
+  trim-vms)      cmd_trim_vms ;;
   all)
     cmd_report
     echo
     cmd_clean_caches
     echo
     cmd_clean_packages
+    echo
+    cmd_trim_vms
     ;;
   *)
-    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|all}"
+    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|trim-vms|all}"
     echo "Set DRY_RUN=1 to preview without deleting anything."
     exit 1
     ;;
