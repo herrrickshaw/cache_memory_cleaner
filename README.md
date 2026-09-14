@@ -54,6 +54,15 @@ always answer "what did I move to the cloud, and where" months later —
 requires [rclone](https://rclone.org) with your remotes already configured
 (`rclone config`).
 
+🔴 **Never point `CLEANER_REMOTES` at a path some other job mirrors with
+`rclone sync`.** A sync job deletes remote files not present in its local
+source to keep the two in lockstep — exactly what `archive-evict` just did to
+its own upload the moment the local copy was removed. This is not
+hypothetical: it happened in the session this feature was built from — four
+archives, verified uploaded, wiped hours later by an unrelated nightly sync
+job that happened to target the same remote folder for a different dataset.
+Use a destination nothing else ever syncs into.
+
 ## What it cleans
 
 - Browser render caches (Chrome, Brave, Firefox) — apps rebuild these on demand

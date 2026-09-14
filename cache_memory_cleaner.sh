@@ -214,6 +214,17 @@ cmd_git_gc() {
 # paths, e.g. CLEANER_REMOTES="dropbox:cache-archives googledrive:cache-archives").
 # Falls back to "dropbox:cache-archives" if a `dropbox:` remote exists and
 # CLEANER_REMOTES is unset. Requires rclone.
+#
+# 🔴 NEVER point CLEANER_REMOTES at a path some OTHER job mirrors with
+# `rclone sync` (delete-what's-not-local semantics) from a local directory —
+# e.g. a nightly backup script that syncs ~/some-local-dir to that same
+# remote path. This function's whole point is to upload something and then
+# delete the LOCAL copy; if a sync job later mirrors its (now smaller) local
+# source onto the same remote folder, it will delete what you just archived
+# to make the remote match. Lost this exact way once: four archives verified
+# uploaded, then wiped by an unrelated nightly `rclone sync --delete-excluded`
+# that happened to target the same destination folder for a different
+# purpose. Use a destination path nothing else writes to, ever.
 ARCHIVE_STAGING="${ARCHIVE_STAGING:-$HOME/.cache_memory_cleaner/archives}"
 ARCHIVE_LOG="${ARCHIVE_LOG:-$HOME/.cache_memory_cleaner/archive_log.tsv}"
 
