@@ -19,6 +19,8 @@ chmod +x cache_memory_cleaner.sh
 ./cache_memory_cleaner.sh find-dormant    # REPORT (not remove) unused tools/casks
 ./cache_memory_cleaner.sh git-gc [path]   # compact a git repo's objects
 ./cache_memory_cleaner.sh trim-vms        # prune + fstrim Podman VM disk images
+./cache_memory_cleaner.sh archive-evict <path> [name]  # archive to the cloud, verify, THEN delete
+./cache_memory_cleaner.sh list-archives   # show everything archive-evict has sent to the cloud
 ./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages + trim-vms
 ```
 
@@ -27,6 +29,30 @@ Set `DRY_RUN=1` to preview every command without deleting anything:
 ```bash
 DRY_RUN=1 ./cache_memory_cleaner.sh clean-caches
 ```
+
+### `archive-evict` — for anything you're not 100% sure is disposable
+
+Every other command in this tool only touches things that are provably
+regenerable in seconds (a cache, a package download). Real cleanup sessions
+keep running into a second category: data that's probably safe to remove but
+would be a pain to lose or rebuild — an old VM/session-state folder, a
+never-packed git repo's loose objects, a one-off dataset dump. For that,
+delete-and-hope is the wrong call. `archive-evict` gives you a third option:
+
+```bash
+export CLEANER_REMOTES="dropbox:cache-archives googledrive:cache-archives"  # any rclone remote:path(s)
+./cache_memory_cleaner.sh archive-evict ~/some/uncertain/directory
+```
+
+It tars+zstds the path, uploads it to **every** remote in `$CLEANER_REMOTES`,
+byte-verifies each upload against the local archive, and deletes the original
+(and the local archive) **only if every remote verifies**. If any upload or
+verification fails, both copies are left in place — nothing is ever deleted on
+a guess. Every successful run is appended to `~/.cache_memory_cleaner/archive_log.tsv`
+(date, original path, archive name, size, remotes), so `list-archives` can
+always answer "what did I move to the cloud, and where" months later —
+requires [rclone](https://rclone.org) with your remotes already configured
+(`rclone config`).
 
 ## What it cleans
 

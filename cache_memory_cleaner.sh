@@ -10,6 +10,8 @@
 #   ./cache_memory_cleaner.sh clean-packages   # brew autoremove/cleanup, npm/pip/gem cache
 #   ./cache_memory_cleaner.sh find-dormant     # report (not remove) unused brew formulae/casks
 #   ./cache_memory_cleaner.sh git-gc [path]    # compact a git repo's objects (safe, reachability-based)
+#   ./cache_memory_cleaner.sh archive-evict <path> [name]  # archive to cloud, verify, THEN delete
+#   ./cache_memory_cleaner.sh list-archives   # show everything archive-evict has sent to the cloud
 #   ./cache_memory_cleaner.sh all              # report + clean-caches + clean-packages
 #
 # Design principles learned the hard way in the session this was built from:
@@ -196,6 +198,107 @@ cmd_git_gc() {
   )
 }
 
+# ── archive-evict ────────────────────────────────────────────────────────
+# Generalizes the "verify then evict" pattern used throughout every real
+# cleanup session this tool is built from: tar+zstd a directory, upload it to
+# every configured cloud remote, byte-verify EACH upload against the local
+# archive, and only delete the original (+ the local archive copy) once every
+# remote is confirmed. If any remote fails, BOTH copies are kept — same
+# fail-safe a nightly backup script uses, generalized to any one-off path
+# instead of a fixed dataset list. Every successful archive is logged to
+# $ARCHIVE_LOG so "what did I move to the cloud and where" stays answerable
+# months later — the whole point of moving something instead of just rm -rf'ing
+# it.
+#
+# Configure destinations with CLEANER_REMOTES (space-separated rclone dest
+# paths, e.g. CLEANER_REMOTES="dropbox:cache-archives googledrive:cache-archives").
+# Falls back to "dropbox:cache-archives" if a `dropbox:` remote exists and
+# CLEANER_REMOTES is unset. Requires rclone.
+ARCHIVE_STAGING="${ARCHIVE_STAGING:-$HOME/.cache_memory_cleaner/archives}"
+ARCHIVE_LOG="${ARCHIVE_LOG:-$HOME/.cache_memory_cleaner/archive_log.tsv}"
+
+cmd_archive_evict() {
+  local path="$1" name="$2"
+  if [ -z "$path" ] || [ ! -e "$path" ]; then
+    log "usage: $0 archive-evict <path> [archive-name]"
+    log "  Archives <path> to \$ARCHIVE_STAGING, uploads it to every remote in"
+    log "  \$CLEANER_REMOTES, byte-verifies each, and ONLY THEN deletes the"
+    log "  original path and the local archive copy. Keeps both if any remote"
+    log "  fails verification."
+    return 1
+  fi
+  if ! command -v rclone >/dev/null 2>&1; then
+    log "rclone not found — install it to use archive-evict."
+    return 1
+  fi
+
+  path="${path%/}"
+  [ -z "$name" ] && name="$(basename "$path")-$(date +%Y%m%d)"
+
+  local remotes="${CLEANER_REMOTES:-}"
+  if [ -z "$remotes" ] && rclone listremotes 2>/dev/null | grep -q '^dropbox:$'; then
+    remotes="dropbox:cache-archives"
+  fi
+  if [ -z "$remotes" ]; then
+    log "No destination configured. Set CLEANER_REMOTES=\"dropbox:some/path googledrive:some/path\""
+    log "(any rclone remote:path works) and retry."
+    return 1
+  fi
+
+  mkdir -p "$ARCHIVE_STAGING" "$(dirname "$ARCHIVE_LOG")"
+  local archive="$ARCHIVE_STAGING/${name}.tar.zst"
+  log "=== Archiving $path -> $archive ==="
+  run "tar -cf - -C '$(dirname "$path")' '$(basename "$path")' | zstd -T0 -19 -o '$archive'"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "[dry-run] would upload $archive to: $remotes"
+    log "[dry-run] would byte-verify each, then delete $path and $archive only if all verify"
+    return 0
+  fi
+
+  local local_size all_ok=1 rem remote_size
+  local_size=$(stat -f%z "$archive" 2>/dev/null || stat -c%s "$archive" 2>/dev/null)
+  for rem in $remotes; do
+    log "=== Uploading to $rem ==="
+    if ! rclone copy "$archive" "$rem" --log-level ERROR; then
+      log "FAIL upload -> $rem"; all_ok=0; continue
+    fi
+    remote_size=$(rclone size "$rem/$(basename "$archive")" --json 2>/dev/null \
+      | python3 -c "import json,sys; print(json.load(sys.stdin)['bytes'])" 2>/dev/null || echo -1)
+    if [ "$local_size" = "$remote_size" ]; then
+      log "OK   verified on $rem ($remote_size bytes)"
+    else
+      log "FAIL verify on $rem (local=$local_size remote=$remote_size)"
+      all_ok=0
+    fi
+  done
+
+  if [ "$all_ok" = 1 ]; then
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$path" "$(basename "$archive")" "$local_size" "$remotes" \
+      >> "$ARCHIVE_LOG"
+    run "rm -rf '$path'"
+    run "rm -f '$archive'"
+    log "OK   $path archived + verified on all remotes; local copies removed."
+    log "     Logged to $ARCHIVE_LOG — run '$0 list-archives' to see everything archived this way."
+  else
+    log "KEPT $path and $archive locally (one or more remotes unverified) — nothing deleted."
+  fi
+}
+
+# ── list-archives ────────────────────────────────────────────────────────
+cmd_list_archives() {
+  if [ ! -f "$ARCHIVE_LOG" ]; then
+    log "No archives recorded yet ($ARCHIVE_LOG doesn't exist)."
+    return 0
+  fi
+  log "=== Everything archive-evict has moved to the cloud ==="
+  log "$(printf '%-20s %-45s %-30s %10s  %s' DATE ORIGINAL-PATH ARCHIVE-NAME BYTES REMOTES)"
+  while IFS=$'\t' read -r date_ orig archive bytes remotes; do
+    printf '%-20s %-45s %-30s %10s  %s\n' "$date_" "$orig" "$archive" "$bytes" "$remotes"
+  done < "$ARCHIVE_LOG"
+}
+
 case "${1:-}" in
   report)        cmd_report ;;
   clean-caches)  cmd_clean_caches ;;
@@ -203,6 +306,8 @@ case "${1:-}" in
   find-dormant)  cmd_find_dormant "${2:-30}" ;;
   git-gc)        cmd_git_gc "${2:-.}" ;;
   trim-vms)      cmd_trim_vms ;;
+  archive-evict) cmd_archive_evict "${2:-}" "${3:-}" ;;
+  list-archives) cmd_list_archives ;;
   all)
     cmd_report
     echo
@@ -213,7 +318,7 @@ case "${1:-}" in
     cmd_trim_vms
     ;;
   *)
-    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|trim-vms|all}"
+    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|archive-evict <path> [name]|list-archives|trim-vms|all}"
     echo "Set DRY_RUN=1 to preview without deleting anything."
     exit 1
     ;;
