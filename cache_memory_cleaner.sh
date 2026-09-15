@@ -13,6 +13,7 @@
 #   ./cache_memory_cleaner.sh archive-evict <path> [name]  # archive to cloud, verify, THEN delete
 #   ./cache_memory_cleaner.sh list-archives   # show everything archive-evict has sent to the cloud
 #   ./cache_memory_cleaner.sh compress-local <path> [<path>...]  # transparent HFS/APFS compression
+#   ./cache_memory_cleaner.sh classify <path>  # recommend a data tier for <path> (read-only, decides nothing)
 #   ./cache_memory_cleaner.sh all              # report + clean-caches + clean-packages
 #
 # Design principles learned the hard way in the session this was built from:
@@ -367,6 +368,195 @@ cmd_compress_local() {
   done
 }
 
+# ── classify ─────────────────────────────────────────────────────────────
+# Applies the decision tree from DATA_TIER_POLICY.md to one path and prints a
+# recommended tier + the specific reason. READ-ONLY: it never deletes, moves,
+# compresses, or uploads anything — it's decision support, not an executor.
+# The tiers (see the policy doc for the full reasoning and real examples):
+#   0  Never touch programmatically   - live app state, personal/scanned docs,
+#                                       GUI-only settings, another process's
+#                                       open files
+#   1  Permanent local, compress      - actively read directly by a script/app,
+#                                       but transparent HFS compression is free
+#   2  Cloud-backed, keep local       - git-tracked (redundant via GitHub), or
+#                                       active non-personal working files
+#   3  Archive to cloud, then evict   - dormant, untracked, not read directly
+#   4  Delete immediately, no backup  - reproducible from a package manager or
+#                                       build step in seconds
+#   ?  Needs manual judgment          - signals are printed; decide by hand
+PERSONAL_DOC_KEYWORDS="certificate receipt statement declaration agreement license licence loan aadhaar aadhar pan_card passport affidavit rti_reply transaction_statement payslip pay_slip form- kyc identity voter ration_card"
+
+cmd_classify() {
+  local path="${1:-}"
+  if [ -z "$path" ] || [ ! -e "$path" ]; then
+    log "usage: $0 classify <path>"
+    return 1
+  fi
+  path="${path%/}"
+  local abspath
+  abspath=$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path")
+  log "=== Classifying: $abspath ==="
+
+  # Signal: is anything running with this path in its argv right now?
+  # (static ps snapshot, never a live self-matching grep in a loop)
+  local ps_snapshot live_process=0
+  ps_snapshot=$(ps aux 2>/dev/null | grep -v "grep\|cache_memory_cleaner.sh")
+  if echo "$ps_snapshot" | grep -qF "$abspath"; then
+    live_process=1
+  fi
+
+  # Signal: personal/scanned-document filename pattern (case-insensitive)
+  local base_lower personal_match=0
+  base_lower=$(basename "$abspath" | tr '[:upper:]' '[:lower:]')
+  for kw in $PERSONAL_DOC_KEYWORDS; do
+    case "$base_lower" in *"$kw"*) personal_match=1 ;; esac
+  done
+  case "$abspath" in *"/Documents/personal-archive/"*) personal_match=1 ;; esac
+
+  # Signal: vendor-managed cloud sync mirror (Dropbox/GDrive local folder)
+  local in_cloudstorage=0
+  case "$abspath" in "$HOME/Library/CloudStorage/"*) in_cloudstorage=1 ;; esac
+
+  # Signal: git status, if inside a repo
+  local git_root="" git_tracked=0 git_ignored=0 has_remote=0 git_check_dir
+  git_check_dir="$abspath"
+  [ -f "$abspath" ] && git_check_dir="$(dirname "$abspath")"
+  git_root=$(cd "$git_check_dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$git_root" ]; then
+    local relpath="${abspath#$git_root/}"
+    git -C "$git_root" ls-files --error-unmatch "$relpath" >/dev/null 2>&1 && git_tracked=1
+    git -C "$git_root" check-ignore -q "$relpath" 2>/dev/null && git_ignored=1
+    [ -n "$(git -C "$git_root" remote 2>/dev/null)" ] && has_remote=1
+  fi
+
+  # Signal: is this itself a git repo with no-upstream branches?
+  local no_upstream_branches=""
+  if [ -d "$abspath/.git" ]; then
+    no_upstream_branches=$(git -C "$abspath" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null | while read -r b; do
+      git -C "$abspath" rev-parse --abbrev-ref "$b@{upstream}" >/dev/null 2>&1 || echo "$b"
+    done)
+  fi
+
+  # Signal: dormancy - days since the most recently modified file inside
+  local newest_epoch days_dormant="unknown"
+  newest_epoch=$(find "$abspath" -type f -exec stat -f '%m' {} + 2>/dev/null | sort -rn | head -1)
+  if [ -z "$newest_epoch" ] && [ -f "$abspath" ]; then
+    newest_epoch=$(stat -f '%m' "$abspath" 2>/dev/null)
+  fi
+  if [ -n "$newest_epoch" ]; then
+    days_dormant=$(( ( $(date +%s) - newest_epoch ) / 86400 ))
+  fi
+
+  # Signal: is this a Python venv?
+  local is_venv=0
+  [ -f "$abspath/bin/activate" ] || [ -f "$abspath/pyvenv.cfg" ] && is_venv=1
+
+  # Signal: pure-cache name pattern (regenerates from a package manager/build step)
+  local base_name pure_cache_name=0
+  base_name=$(basename "$abspath")
+  case "$base_name" in
+    __pycache__|.pytest_cache|node_modules|.npm|Homebrew|.gem|_npx) pure_cache_name=1 ;;
+  esac
+
+  # Signal: many-small-files raw-cache shape (thousands of files, no single
+  # dominant blob) - a hint this belongs in datasets.conf/STATIC_SUBDIRS
+  # rather than a one-off archive-evict.
+  local file_count=0
+  file_count=$(find "$abspath" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+  log "  live process has it open (argv match): $([ "$live_process" = 1 ] && echo yes || echo no)"
+  log "  personal/scanned-document filename pattern: $([ "$personal_match" = 1 ] && echo yes || echo no)"
+  log "  inside a vendor cloud-sync mirror (CloudStorage): $([ "$in_cloudstorage" = 1 ] && echo yes || echo no)"
+  log "  git: root=${git_root:-none} tracked=$git_tracked ignored=$git_ignored has_remote=$has_remote"
+  [ -n "$no_upstream_branches" ] && log "  branches with no upstream (unpushed, no GitHub copy): $no_upstream_branches"
+  log "  days since last file modified inside: $days_dormant"
+  log "  looks like a Python venv: $([ "$is_venv" = 1 ] && echo yes || echo no)"
+  log "  pure-cache directory name: $([ "$pure_cache_name" = 1 ] && echo yes || echo no)"
+  log "  file count: $file_count"
+  log
+
+  # Decision tree, in the same priority order as DATA_TIER_POLICY.md
+  if [ "$live_process" = 1 ]; then
+    log "RECOMMENDATION: Tier 0 - never touch programmatically"
+    log "  reason: a currently-running process has this path open (or another"
+    log "  session's argv references it). Deleting/moving risks breaking live work."
+    return 0
+  fi
+  if [ "$personal_match" = 1 ]; then
+    log "RECOMMENDATION: Tier 0 - never touch programmatically"
+    log "  reason: filename/path matches a personal or scanned-document pattern."
+    log "  OCR/text extraction is never a substitute for the original file; if you"
+    log "  want it backed up, copy it (Tier 2), never convert-and-delete it."
+    return 0
+  fi
+  if [ "$in_cloudstorage" = 1 ]; then
+    log "RECOMMENDATION: Tier 0 - never touch programmatically"
+    log "  reason: lives inside a vendor's cloud-sync mirror (Dropbox/GDrive under"
+    log "  Library/CloudStorage). Local-vs-cloud-only state here is a GUI-only"
+    log "  setting (e.g. Dropbox Smart Sync) with no reliable CLI equivalent."
+    return 0
+  fi
+  if [ -n "$no_upstream_branches" ]; then
+    log "RECOMMENDATION: Tier 3 - archive to cloud (git bundle), then it's safe to"
+    log "  leave the branches as-is or clean them up"
+    log "  reason: these branches exist only on this disk. Run:"
+    log "    git bundle create <name>.bundle --all --git-dir='$abspath/.git' (or cd + --all)"
+    log "  then archive-evict the bundle. Do this before anything else on this path."
+    return 0
+  fi
+  if [ "$is_venv" = 1 ] || { [ "$git_tracked" = 1 ] && [ "$days_dormant" != "unknown" ] && [ "$days_dormant" -lt 7 ] 2>/dev/null; }; then
+    log "RECOMMENDATION: Tier 1 - permanent local, compress in place"
+    log "  reason: $([ "$is_venv" = 1 ] && echo "Python venv - regenerable via requirements.txt/pyproject.toml, but until it's rebuilt something needs it as real files" || echo "git-tracked and recently active - likely read directly by current work")"
+    log "  action: $0 compress-local '$abspath'"
+    return 0
+  fi
+  if [ "$pure_cache_name" = 1 ]; then
+    log "RECOMMENDATION: Tier 4 - delete immediately, no backup needed"
+    log "  reason: name matches a known pure-cache pattern that regenerates from"
+    log "  its package manager or build tool in seconds to minutes."
+    return 0
+  fi
+  if [ "$git_tracked" = 1 ]; then
+    if [ "$has_remote" = 1 ]; then
+      log "RECOMMENDATION: Tier 2 - already cloud-backed via GitHub, keep local"
+      log "  reason: git-tracked with a remote - it's already redundant. Do not"
+      log "  also duplicate the working tree to Dropbox/GDrive; that's wasted"
+      log "  space for zero extra safety. Deleting it locally only shows up as an"
+      log "  uncommitted change, it doesn't free space until committed."
+    else
+      log "RECOMMENDATION: Tier 3 - archive to cloud (git bundle) - no remote configured"
+      log "  reason: git-tracked but this repo has NO remote at all, so GitHub"
+      log "  provides zero redundancy here. Bundle the whole repo, not just files."
+    fi
+    return 0
+  fi
+  if [ "$days_dormant" != "unknown" ] && [ "$days_dormant" -ge 14 ] 2>/dev/null; then
+    if [ "$file_count" -gt 500 ] 2>/dev/null; then
+      log "RECOMMENDATION: Tier 3 - archive to cloud, then evict (but check first"
+      log "  whether this is a RECURRING regenerating cache, not a one-off)"
+      log "  reason: dormant ($days_dormant days), untracked, and shaped like a"
+      log "  many-small-files raw cache ($file_count files). If a pipeline"
+      log "  regenerates this on its own schedule, add it to"
+      log "  ~/.config/market-data/datasets.conf + cloud_backup.sh's"
+      log "  STATIC_SUBDIRS instead of a one-off archive-evict, so re-archival"
+      log "  stays automatic. Otherwise:"
+      log "    $0 archive-evict '$abspath'"
+    else
+      log "RECOMMENDATION: Tier 3 - archive to cloud, then evict"
+      log "  reason: dormant ($days_dormant days) and untracked - not read by"
+      log "  anything found in a live-process check. Verify nothing depends on it"
+      log "  before running:"
+      log "    $0 archive-evict '$abspath'"
+    fi
+    return 0
+  fi
+
+  log "RECOMMENDATION: needs manual judgment"
+  log "  reason: no rule matched cleanly (recently touched, untracked, not a"
+  log "  known cache/venv shape). Read what actually references this path"
+  log "  (grep the codebase, check what wrote it last) before deciding."
+}
+
 case "${1:-}" in
   report)        cmd_report ;;
   clean-caches)  cmd_clean_caches ;;
@@ -377,6 +567,7 @@ case "${1:-}" in
   archive-evict) cmd_archive_evict "${2:-}" "${3:-}" ;;
   list-archives) cmd_list_archives ;;
   compress-local) shift; cmd_compress_local "$@" ;;
+  classify)       cmd_classify "${2:-}" ;;
   all)
     cmd_report
     echo
@@ -387,7 +578,7 @@ case "${1:-}" in
     cmd_trim_vms
     ;;
   *)
-    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|archive-evict <path> [name]|list-archives|compress-local <path> [<path>...]|trim-vms|all}"
+    echo "Usage: $0 {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|archive-evict <path> [name]|list-archives|compress-local <path> [<path>...]|classify <path>|trim-vms|all}"
     echo "Set DRY_RUN=1 to preview without deleting anything."
     exit 1
     ;;

@@ -22,6 +22,7 @@ chmod +x cache_memory_cleaner.sh
 ./cache_memory_cleaner.sh archive-evict <path> [name]  # archive to the cloud, verify, THEN delete
 ./cache_memory_cleaner.sh list-archives   # show everything archive-evict has sent to the cloud
 ./cache_memory_cleaner.sh compress-local <path> [<path>...]  # transparent HFS/APFS compression
+./cache_memory_cleaner.sh classify <path> # recommend a data tier for <path> (read-only)
 ./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages + trim-vms
 ```
 
@@ -98,6 +99,29 @@ hypothetical: it happened in the session this feature was built from — four
 archives, verified uploaded, wiped hours later by an unrelated nightly sync
 job that happened to target the same remote folder for a different dataset.
 Use a destination nothing else ever syncs into.
+
+### `classify` — which tier does this path belong in?
+
+The other commands are all executors — you already decided what to do.
+`classify` is the decision step before that, distilled into a read-only
+heuristic: given a path, it inspects git status (tracked? has a remote?
+branches with no upstream?), whether a live process has it open, whether it
+sits inside a vendor cloud-sync mirror, whether its name matches a
+personal/scanned-document pattern, how long since anything inside it changed,
+and whether it looks like a venv or a known pure-cache shape — then prints one
+of five recommendations (never touch / compress in place / cloud-backed keep
+local / archive then evict / delete now) with the specific reason, and the
+exact follow-up command to run.
+
+```bash
+./cache_memory_cleaner.sh classify ~/some/uncertain/directory
+```
+
+It never deletes, moves, or compresses anything itself. The full decision
+tree, real examples, and the hazards behind each rule are written up in
+[`DATA_TIER_POLICY.md`](https://github.com/herrrickshaw/repo-data-dedup/blob/main/DATA_TIER_POLICY.md)
+in the companion `repo-data-dedup` repo — read that first if a `classify` call
+surprises you.
 
 ## What it cleans
 
