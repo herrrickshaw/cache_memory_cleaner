@@ -1,0 +1,20 @@
+{
+  "cache_memory_cleaner.sh": {
+    "mtime": 1789439197.7928493,
+    "seen": 1789968634.652689,
+    "ast_hash": "642206a414d6f16b2c06119c183483f6",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1789439393.2010813,
+    "seen": 1789968634.652704,
+    "ast_hash": "824b11244329323933f328d3cabb8268",
+    "semantic_hash": ""
+  },
+  ".github/workflows/quality-gates.yml": {
+    "mtime": 1789577602.3920796,
+    "seen": 1789968634.652698,
+    "ast_hash": "510f7e392c07f0574ba8a559ba2cdf12",
+    "semantic_hash": ""
+  }
+}
