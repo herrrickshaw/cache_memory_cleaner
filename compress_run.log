@@ -1,0 +1,52 @@
+  /Users/umashankar/market-pipeline:
+  Number of HFS+/APFS compressed files: 97368
+/Users/umashankar/market-pipeline: 3.7G -> 3.7G
+  /Users/umashankar/repos:
+  Number of HFS+/APFS compressed files: 3780
+/Users/umashankar/repos: 3.5G -> 3.5G
+  /Users/umashankar/research-toolkit/md_corpus:
+  Number of HFS+/APFS compressed files: 42207
+/Users/umashankar/research-toolkit/md_corpus: 5.2G -> 1.7G
+  /Users/umashankar/data:
+  Number of HFS+/APFS compressed files: 17
+/Users/umashankar/data: 336M -> 223M
+  /Users/umashankar/icu-dashboard-analogue:
+  Number of HFS+/APFS compressed files: 11634
+/Users/umashankar/icu-dashboard-analogue: 397M -> 165M
+  /Users/umashankar/lok-rajya-sabha-qa:
+  Number of HFS+/APFS compressed files: 360
+/Users/umashankar/lok-rajya-sabha-qa: 250M -> 166M
+  /Users/umashankar/lng-design-opensource:
+  Number of HFS+/APFS compressed files: 13179
+/Users/umashankar/lng-design-opensource: 246M -> 243M
+  /Users/umashankar/coal-to-urea-design-opensource:
+  Number of HFS+/APFS compressed files: 13419
+/Users/umashankar/coal-to-urea-design-opensource: 246M -> 245M
+  /Users/umashankar/biomass-to-syngas-opensource:
+  Number of HFS+/APFS compressed files: 13402
+/Users/umashankar/biomass-to-syngas-opensource: 245M -> 245M
+  /Users/umashankar/digital-twin-for-ipa:
+  Number of HFS+/APFS compressed files: 603
+/Users/umashankar/digital-twin-for-ipa: 127M -> 121M
+  /Users/umashankar/india-trade-sector-policy-recommendations:
+  Number of HFS+/APFS compressed files: 338
+/Users/umashankar/india-trade-sector-policy-recommendations: 103M ->  69M
+  /Users/umashankar/eu-ets-compliance-platform:
+  Number of HFS+/APFS compressed files: 4374
+/Users/umashankar/eu-ets-compliance-platform: 147M ->  76M
+  /Users/umashankar/masaladeutsch-archive:
+  Number of HFS+/APFS compressed files: 3615
+/Users/umashankar/masaladeutsch-archive: 150M -> 145M
+  /Users/umashankar/market-brief-base:
+  Number of HFS+/APFS compressed files: 4672
+/Users/umashankar/market-brief-base:  93M ->  38M
+  /Users/umashankar/BazaarTalks-cpp:
+  Number of HFS+/APFS compressed files: 14537
+/Users/umashankar/BazaarTalks-cpp: 180M -> 179M
+  /Users/umashankar/paperless-ngx:
+  Number of HFS+/APFS compressed files: 1507
+/Users/umashankar/paperless-ngx:  73M ->  15M
+  /Users/umashankar/Downloads:
+  Number of HFS+/APFS compressed files: 1496
+/Users/umashankar/Downloads: 647M -> 542M
+done

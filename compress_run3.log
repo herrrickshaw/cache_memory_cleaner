@@ -1,0 +1,25 @@
+  /Users/umashankar/.claude:
+  Number of HFS+/APFS compressed files: 19438
+/Users/umashankar/.claude: 2.2G -> 2.1G
+  /Users/umashankar/.graphify:
+  Number of HFS+/APFS compressed files: 22676
+/Users/umashankar/.graphify: 1.7G -> 1.6G
+  /Users/umashankar/.linkedin-mcp:
+  Number of HFS+/APFS compressed files: 1471
+/Users/umashankar/.linkedin-mcp: 255M ->  86M
+  /Users/umashankar/.notebooklm-mcp-cli:
+  Number of HFS+/APFS compressed files: 732
+/Users/umashankar/.notebooklm-mcp-cli: 100M -> 100M
+  /Users/umashankar/.duckdb:
+  Number of HFS+/APFS compressed files: 7
+/Users/umashankar/.duckdb: 147M -> 143M
+  /Users/umashankar/.ruvector:
+  Number of HFS+/APFS compressed files: 2
+/Users/umashankar/.ruvector:  87M ->  79M
+  /Users/umashankar/.idaes:
+  Number of HFS+/APFS compressed files: 155
+/Users/umashankar/.idaes: 100M -> 100M
+  /Users/umashankar/india-quality-regulation:
+  Number of HFS+/APFS compressed files: 208
+/Users/umashankar/india-quality-regulation:  58M ->  49M
+done
