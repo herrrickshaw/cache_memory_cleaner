@@ -1,5 +1,9 @@
 # cache_memory_cleaner
 
+<!-- how-to-use-with-ai -->
+> **New here?** See [How to use this repo with AI (Claude, Gemini, ChatGPT)](HOW_TO_USE_WITH_AI.md) — clone it, paste it into an AI tool, and ask in plain English.
+
+
 A macOS cache/storage cleanup script, distilled from a real disk-space
 recovery session (99% full → healthy). It only touches things that are
 provably regenerable or provably unused — it will not delete a live
