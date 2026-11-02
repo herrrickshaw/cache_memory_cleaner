@@ -1,0 +1,6 @@
+usage: @SCRIPT@ archive-evict <path> [archive-name]
+  Archives <path> to $ARCHIVE_STAGING, uploads it to every remote in
+  $CLEANER_REMOTES, byte-verifies each, and ONLY THEN deletes the
+  original path and the local archive copy. Keeps both if any remote
+  fails verification.
+exit=1

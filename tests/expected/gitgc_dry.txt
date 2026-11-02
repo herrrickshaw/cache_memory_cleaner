@@ -1,0 +1,7 @@
+=== Branches with no upstream (commits exist ONLY locally) ===
+  main
+
+=== Running git gc (.git currently: @SIZE@) ===
+[dry-run] git gc --prune=now
+.git: @SIZE@ -> @SIZE@
+exit=0

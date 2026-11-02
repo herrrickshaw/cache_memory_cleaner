@@ -1,0 +1,14 @@
+=== Classifying: @SANDBOX@/venv ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: no
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=none tracked=0 ignored=0 has_remote=0
+  days since last file modified inside: @N@
+  looks like a Python venv: yes
+  pure-cache directory name: no
+  file count: 2
+
+RECOMMENDATION: Tier 1 - permanent local, compress in place
+  reason: Python venv - regenerable via requirements.txt/pyproject.toml, but until it's rebuilt something needs it as real files
+  action: @SCRIPT@ compress-local '@SANDBOX@/venv'
+exit=0

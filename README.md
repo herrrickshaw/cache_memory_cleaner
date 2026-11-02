@@ -3,175 +3,165 @@
 <!-- how-to-use-with-ai -->
 > **New here?** See [How to use this repo with AI (Claude, Gemini, ChatGPT)](HOW_TO_USE_WITH_AI.md) — clone it, paste it into an AI tool, and ask in plain English.
 
+A single bash script that recovers disk space on a personal macOS machine, distilled
+from a real disk-space recovery session (99% full → healthy). It removes only what is
+provably regenerable (browser and package-manager caches), reports — never removes —
+dormant tools, and for everything else implements a five-tier data policy
+(never-touch / compress / cloud-keep-local / archive-evict / delete-now) with a
+read-only `classify` step and a "verify then evict" archiver. Output is plain text on
+stdout; `archive-evict` additionally appends a TSV ledger of what went to the cloud.
 
-A macOS cache/storage cleanup script, distilled from a real disk-space
-recovery session (99% full → healthy). It only touches things that are
-provably regenerable or provably unused — it will not delete a live
-database, a running app's active state, or any data it can't verify is
-safe to remove.
+> Status: active. Installed on the owner's Mac and called from scheduled jobs
+> (`classify <path>`). This script deletes files — read the tier table and the hazards
+> below before running anything other than `report`, `classify`, or `DRY_RUN=1`.
 
-## Usage
+## What it does
+- `clean-caches`: deletes browser render caches (Chrome, Brave, Firefox), Chrome's
+  redownloadable on-device ML model caches and per-profile Service Worker/GPU caches,
+  and Homebrew/pip/npm/uv/gem download caches — never IndexedDB, Extensions, or
+  Local Storage.
+- `clean-packages`: `brew autoremove`, `brew cleanup -s`, `npm cache clean --force`.
+- `find-dormant [days]`: reports (only) brew leaves, ghost casks whose `.app` is gone,
+  Application Support dirs with no file activity in N days (default 30), and
+  never-started Podman machines.
+- `git-gc [path]`: lists branches with no upstream, then `git gc --prune=now`.
+- `trim-vms`: `podman system prune` plus `fstrim` inside the VM so the host-side sparse
+  disk image actually shrinks.
+- `archive-evict <path> [name]`: tar+zstd, upload to every rclone remote in
+  `CLEANER_REMOTES`, byte-verify each, and only then delete the original and the local
+  archive; logs each success to `~/.cache_memory_cleaner/archive_log.tsv`
+  (`list-archives` prints it).
+- `compress-local <path>...`: transparent HFS+/APFS compression via `afsctool`; files
+  stay byte-identical to every reader, only on-disk size shrinks.
+- `classify <path>`: read-only tier recommendation with the signals that drove it.
 
+## Quick start
 ```bash
 git clone https://github.com/herrrickshaw/cache_memory_cleaner.git
 cd cache_memory_cleaner
 chmod +x cache_memory_cleaner.sh
-
-./cache_memory_cleaner.sh report          # disk usage + top consumers, no changes
-./cache_memory_cleaner.sh clean-caches    # clear browser + package-manager caches
-./cache_memory_cleaner.sh clean-packages  # brew autoremove/cleanup, npm cache
-./cache_memory_cleaner.sh find-dormant    # REPORT (not remove) unused tools/casks
-./cache_memory_cleaner.sh git-gc [path]   # compact a git repo's objects
-./cache_memory_cleaner.sh trim-vms        # prune + fstrim Podman VM disk images
-./cache_memory_cleaner.sh archive-evict <path> [name]  # archive to the cloud, verify, THEN delete
-./cache_memory_cleaner.sh list-archives   # show everything archive-evict has sent to the cloud
-./cache_memory_cleaner.sh compress-local <path> [<path>...]  # transparent HFS/APFS compression
-./cache_memory_cleaner.sh classify <path> # recommend a data tier for <path> (read-only)
-./cache_memory_cleaner.sh all             # report + clean-caches + clean-packages + trim-vms
+./cache_memory_cleaner.sh report                      # disk usage + top consumers, no changes
+DRY_RUN=1 ./cache_memory_cleaner.sh clean-caches      # preview every rm before trusting it
+./cache_memory_cleaner.sh classify ~/some/uncertain/directory
 ```
 
-Set `DRY_RUN=1` to preview every command without deleting anything:
+Full command list:
 
-```bash
-DRY_RUN=1 ./cache_memory_cleaner.sh clean-caches
+```
+./cache_memory_cleaner.sh {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|
+                           archive-evict <path> [name]|list-archives|compress-local <path> [<path>...]|
+                           classify <path>|trim-vms|all}
 ```
 
-### `archive-evict` — for anything you're not 100% sure is disposable
+`all` = report + clean-caches + clean-packages + trim-vms. Any unknown subcommand
+(including `--help`) prints the usage line and exits 1.
 
-Every other command in this tool only touches things that are provably
-regenerable in seconds (a cache, a package download). Real cleanup sessions
-keep running into a second category: data that's probably safe to remove but
-would be a pain to lose or rebuild — an old VM/session-state folder, a
-never-packed git repo's loose objects, a one-off dataset dump. For that,
-delete-and-hope is the wrong call. `archive-evict` gives you a third option:
+## How it works
+
+One script, one function per subcommand (`cmd_*`), dispatched by a `case` in `main`
+(macOS ships bash 3.2, so no associative arrays). Every mutating command goes through
+`run`/`run_rm_rf`, which print the command instead of executing it when `DRY_RUN=1`;
+there is no `eval`.
+
+### The five-tier data policy behind `classify`
+
+| Tier | Meaning | Typical case | Follow-up |
+|---|---|---|---|
+| 0 | Never touch programmatically | live app state, personal/scanned docs, vendor cloud-sync mirrors, another process's open files | leave alone |
+| 1 | Permanent local, compress in place | Python venvs; git-tracked files modified in the last 7 days | `compress-local` |
+| 2 | Cloud-backed, keep local | git-tracked with a remote (GitHub is already the backup) | nothing |
+| 3 | Archive to cloud, then evict | untracked and untouched for ≥14 days; repos with no remote or with unpushed branches (bundle first) | `archive-evict` |
+| 4 | Delete immediately, no backup | `__pycache__`, `node_modules`, `.npm`, Homebrew cache, etc. | `rm -rf` |
+| ? | Needs manual judgment | recently touched, untracked, not a known shape | read what references it |
+
+`classify` gathers signals (`sig_*` functions) and `classify_recommend` stops at the
+first rule that matches, in this order: live process has the path in its argv →
+personal-document filename pattern or `Documents/personal-archive/` → under
+`~/Library/CloudStorage/` → repo with no-upstream branches → venv or recently-active
+tracked file → pure-cache name → tracked (remote? Tier 2 : Tier 3) → dormant ≥14 days
+(more than 500 files flags a recurring raw-cache shape) → manual. It never deletes,
+moves, or compresses anything. The full policy with real examples lives in
+[`DATA_TIER_POLICY.md`](https://github.com/herrrickshaw/repo-data-dedup/blob/main/DATA_TIER_POLICY.md)
+in the companion `repo-data-dedup` repo.
+
+### `archive-evict`: verify then evict
 
 ```bash
 export CLEANER_REMOTES="dropbox:cache-archives googledrive:cache-archives"  # any rclone remote:path(s)
 ./cache_memory_cleaner.sh archive-evict ~/some/uncertain/directory
 ```
 
-It tars+zstds the path, uploads it to **every** remote in `$CLEANER_REMOTES`,
-byte-verifies each upload against the local archive, and deletes the original
-(and the local archive) **only if every remote verifies**. If any upload or
-verification fails, both copies are left in place — nothing is ever deleted on
-a guess. Every successful run is appended to `~/.cache_memory_cleaner/archive_log.tsv`
-(date, original path, archive name, size, remotes), so `list-archives` can
-always answer "what did I move to the cloud, and where" months later —
-requires [rclone](https://rclone.org) with your remotes already configured
-(`rclone config`).
+The path is tarred and zstd-compressed first (cloud APIs throttle per request, so a
+directory of thousands of small files syncs raw in hours and as one archive in
+minutes), uploaded to **every** remote, and each upload's byte size is compared with
+the local archive. The original and the local archive are deleted **only if every
+remote verifies**; otherwise both are kept. Each success is appended to
+`$ARCHIVE_LOG` (date, original path, archive name, bytes, remotes).
 
-### `compress-local` — for data that has to stay on disk
+### `compress-local`: data that must stay on disk
 
-Not everything belongs in the cloud — a live pipeline's working set, a repo's
-own reports, an actively-read cache all need to stay local. For those,
-`compress-local` applies macOS's native HFS+/APFS transparent compression
-(`decmpfs`) instead:
+Measured on real data: a Python venv 209M → 92M (56% smaller) and still ran; a 123M
+JSON knowledge-graph file → 6.2M (95% smaller), `json.load()` round-trip
+byte-identical; 400 CSV/Markdown report files 60M → 16M (72.8% smaller). Best on
+plain and structured text; skip JPEG/PNG, MP4, Office docs, `.git/objects`, Parquet
+(`afsctool` no-ops on them but burns CPU). Idempotent and safe on live data.
 
+## Repository layout
+| Path | Purpose |
+|---|---|
+| `cache_memory_cleaner.sh` | the whole tool |
+| `tests/smoke.sh`, `tests/expected/` | characterisation smoke test and recorded outputs (see Testing) |
+| `.github/workflows/ci.yml` | `bash -n`, `shellcheck -S error`, smoke test on macOS |
+| `.github/workflows/quality-gates.yml` | gitleaks secret scan |
+| `HOW_TO_USE_WITH_AI.md` | plain-language guide for non-programmers |
+| `compress_run*.log`, `graphify-out/` | logs from past runs and a knowledge-graph export; not used by the script |
+
+## Configuration
+All via environment variables; nothing is read from a config file and no secrets are
+needed by the script itself (cloud credentials live in rclone's own config, never here).
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DRY_RUN` | `0` | `1` prints every mutating command instead of running it |
+| `CLEANER_REMOTES` | unset → `dropbox:cache-archives` if a `dropbox:` rclone remote exists | space-separated rclone destinations for `archive-evict` |
+| `ARCHIVE_STAGING` | `~/.cache_memory_cleaner/archives` | where the local `.tar.zst` is built |
+| `ARCHIVE_LOG` | `~/.cache_memory_cleaner/archive_log.tsv` | ledger read by `list-archives` |
+
+External tools, only when the subcommand needs them: `rclone` + `zstd`
+(`archive-evict`), `afsctool` (`compress-local`, `brew install afsctool`), `brew`,
+`npm`, `podman` (skipped if absent).
+
+## Testing
 ```bash
-brew install afsctool  # one-time
-./cache_memory_cleaner.sh compress-local ~/some/path ~/another/path
+tests/smoke.sh            # bash -n, usage, classify on fixtures, DRY_RUN=1 paths; diffs vs tests/expected
+tests/smoke.sh --record   # re-record expectations after an intentional output change
 ```
+The test builds its own sandbox, redirects `$HOME` into it for `clean-caches`, and
+never runs a deleting subcommand for real. Expectations are macOS-specific (BSD
+`stat`/`ps`), so CI uses `macos-latest`.
 
-This is **not** gzip. The file's name, extension, and content are completely
-unchanged to every reader — a text editor, `cat`, `python -c "import json;
-json.load(open(...))"`, a Python interpreter importing from a venv's
-site-packages — all get the original bytes back automatically, with no
-decompression step anywhere in your code or workflow. Only the on-disk
-storage shrinks.
+## Limitations and known issues
+- 🔴 **Never point `CLEANER_REMOTES` at a path some other job mirrors with
+  `rclone sync`.** A sync job deletes remote files absent from its local source —
+  exactly what `archive-evict` just removed locally. This happened: four verified
+  archives were wiped hours later by an unrelated nightly sync into the same folder.
+  Use a destination nothing else ever syncs into.
+- 🔴 `ditto --hfsCompression` silently no-ops on non-Apple content on recent macOS;
+  the script uses `afsctool` instead.
+- `classify`'s "live process" signal is an argv substring match on a `ps aux`
+  snapshot; a process holding the path open without naming it in argv is not detected.
+- `git gc` compacts reachable objects only; it never reclaims space from branches
+  deleted without merging — that stays a human decision.
+- A brew cask listed as installed can be a "ghost" whose `.app` was deleted by hand;
+  `find-dormant` checks `/Applications` against `brew info --cask`.
+- Pruning inside a VM does not shrink its host disk image until `fstrim` runs in the
+  guest; `trim-vms` does both.
+- PEP 668: packages in Homebrew Python's protected site-packages upgrade in place only
+  with `--break-system-packages` (the same method they were installed with).
+- macOS only (BSD `stat -f`, `df -g`, `ps aux` formats).
 
-Measured on real data: a Python venv 209M → 92M (56% smaller), still executed
-correctly afterward. A 123M JSON knowledge-graph file → 6.2M (95% smaller),
-round-tripped through `json.load()` byte-identical. A directory of 400
-CSV/Markdown report files: 60M → 16M (72.8% smaller).
+## Related repositories
+- [repo-data-dedup](https://github.com/herrrickshaw/repo-data-dedup) — `DATA_TIER_POLICY.md`, the written policy `classify` implements.
 
-Best candidates: plain and structured text — source code, CSV, JSON,
-Markdown, logs, XML, venvs (mostly `.py`/`.txt`). Skip already-compressed
-formats (JPEG/PNG, MP4, ZIP-based Office docs, `.git/objects`, Parquet) —
-`afsctool` tries and safely no-ops on these, but running it there just burns
-CPU. Safe to run repeatedly and safe on live/actively-read data: a reader
-never observes a "compressing" state, only complete files before and after.
-
-🔴 `ditto --hfsCompression` (built into macOS, no install needed) looks like
-the obvious tool for this but is **not reliable** on recent macOS — it
-silently no-ops on non-Apple content with no error. Use `afsctool`.
-
-🔴 **Never point `CLEANER_REMOTES` at a path some other job mirrors with
-`rclone sync`.** A sync job deletes remote files not present in its local
-source to keep the two in lockstep — exactly what `archive-evict` just did to
-its own upload the moment the local copy was removed. This is not
-hypothetical: it happened in the session this feature was built from — four
-archives, verified uploaded, wiped hours later by an unrelated nightly sync
-job that happened to target the same remote folder for a different dataset.
-Use a destination nothing else ever syncs into.
-
-### `classify` — which tier does this path belong in?
-
-The other commands are all executors — you already decided what to do.
-`classify` is the decision step before that, distilled into a read-only
-heuristic: given a path, it inspects git status (tracked? has a remote?
-branches with no upstream?), whether a live process has it open, whether it
-sits inside a vendor cloud-sync mirror, whether its name matches a
-personal/scanned-document pattern, how long since anything inside it changed,
-and whether it looks like a venv or a known pure-cache shape — then prints one
-of five recommendations (never touch / compress in place / cloud-backed keep
-local / archive then evict / delete now) with the specific reason, and the
-exact follow-up command to run.
-
-```bash
-./cache_memory_cleaner.sh classify ~/some/uncertain/directory
-```
-
-It never deletes, moves, or compresses anything itself. The full decision
-tree, real examples, and the hazards behind each rule are written up in
-[`DATA_TIER_POLICY.md`](https://github.com/herrrickshaw/repo-data-dedup/blob/main/DATA_TIER_POLICY.md)
-in the companion `repo-data-dedup` repo — read that first if a `classify` call
-surprises you.
-
-## What it cleans
-
-- Browser render caches (Chrome, Brave, Firefox) — apps rebuild these on demand
-- Chrome's redownloadable on-device ML model caches (`OptGuideOnDeviceModel`,
-  `screen_ai`, etc.) and per-profile Service Worker/GPU caches — **not**
-  `IndexedDB`, `Extensions`, or `Local Storage`, which can hold real data
-- Homebrew, pip, npm, uv, and gem download caches
-- Orphaned Homebrew dependencies (`brew autoremove`) and old formula versions
-  (`brew cleanup`)
-
-## What it only *reports*, never removes automatically
-
-- `find-dormant`: Homebrew leaves, ghost casks (registered but the `.app` was
-  deleted by hand), Application Support directories with zero recent file
-  activity, and never-started Podman VMs. All of these need a human decision
-  — the script won't guess whether you still need a tool.
-- `git-gc`: branches with no upstream (their commits exist nowhere but your
-  disk) get listed as a warning before the `gc` runs. `git gc` itself is safe
-  regardless of push status — it compacts *reachable* objects, it never
-  deletes branch history — but it's still worth knowing which branches have
-  no off-machine backup.
-
-## Lessons baked into this tool
-
-- **Verify then evict.** Never delete a local copy because you *think* it's
-  backed up — check the remote copy's byte size matches first.
-- **Archive many-small-files directories before uploading.** Cloud APIs
-  (Dropbox, Google Drive) throttle per-request, not per-byte. A directory
-  with tens of thousands of small files can take hours to sync raw; the same
-  data tarred into one archive uploads in minutes.
-- **A cask being "installed" doesn't mean the app exists.** Check
-  `/Applications` against `brew info --cask <name>`'s real app name — apps
-  deleted by hand outside of Homebrew leave a stale registry entry.
-- **A VM/container runtime that shows "never started" is pure waste.**
-  `podman machine list` (or the equivalent for your container tool) will
-  tell you if a multi-GB disk allocation was set up and never touched.
-- **PEP 668 needs `--break-system-packages` for in-place upgrades** of
-  packages already living in Homebrew's protected Python site-packages —
-  the same method they were originally installed with, not a workaround.
-- **Pruning inside a VM doesn't shrink its host-side disk image.** A guest
-  OS marks freed blocks internally, but the host's sparse file only shrinks
-  once something issues a real discard. `podman system prune` freeing 1.76GB
-  *inside* a VM left its 10GB host footprint untouched; `fstrim -av` over
-  `podman machine ssh` afterward dropped it to 2GB, machine still fully usable.
-
-## License
-
-MIT
+## Licence
+MIT — see [LICENSE](LICENSE).

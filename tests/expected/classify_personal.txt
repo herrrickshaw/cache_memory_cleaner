@@ -1,0 +1,15 @@
+=== Classifying: @SANDBOX@/docs/passport_scan.pdf ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: yes
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=none tracked=0 ignored=0 has_remote=0
+  days since last file modified inside: @N@
+  looks like a Python venv: no
+  pure-cache directory name: no
+  file count: 1
+
+RECOMMENDATION: Tier 0 - never touch programmatically
+  reason: filename/path matches a personal or scanned-document pattern.
+  OCR/text extraction is never a substitute for the original file; if you
+  want it backed up, copy it (Tier 2), never convert-and-delete it.
+exit=0

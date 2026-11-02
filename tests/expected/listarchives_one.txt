@@ -1,0 +1,4 @@
+=== Everything archive-evict has moved to the cloud ===
+DATE                 ORIGINAL-PATH                                 ARCHIVE-NAME                        BYTES  REMOTES
+2026-01-01T00:00:00Z /x/y                                          y-@DATE@.tar.zst                  12345  dropbox:cache-archives
+exit=0
