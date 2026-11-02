@@ -1,0 +1,14 @@
+=== Classifying: @SANDBOX@/__pycache__ ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: no
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=none tracked=0 ignored=0 has_remote=0
+  days since last file modified inside: @N@
+  looks like a Python venv: no
+  pure-cache directory name: yes
+  file count: 1
+
+RECOMMENDATION: Tier 4 - delete immediately, no backup needed
+  reason: name matches a known pure-cache pattern that regenerates from
+  its package manager or build tool in seconds to minutes.
+exit=0

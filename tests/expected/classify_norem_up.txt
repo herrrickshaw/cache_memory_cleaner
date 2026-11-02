@@ -1,0 +1,17 @@
+=== Classifying: @SANDBOX@/repo_noremote ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: no
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=@SANDBOX@/repo_noremote tracked=1 ignored=0 has_remote=0
+  branches with no upstream (unpushed, no GitHub copy): main
+  days since last file modified inside: @N@
+  looks like a Python venv: no
+  pure-cache directory name: no
+  file count: 27
+
+RECOMMENDATION: Tier 3 - archive to cloud (git bundle), then it's safe to
+  leave the branches as-is or clean them up
+  reason: these branches exist only on this disk. Run:
+    git bundle create <name>.bundle --all --git-dir='@SANDBOX@/repo_noremote/.git' (or cd + --all)
+  then archive-evict the bundle. Do this before anything else on this path.
+exit=0

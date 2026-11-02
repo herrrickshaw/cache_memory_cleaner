@@ -1,0 +1,20 @@
+=== Classifying: @SANDBOX@/dormant_many ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: no
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=none tracked=0 ignored=0 has_remote=0
+  days since last file modified inside: @N@
+  looks like a Python venv: no
+  pure-cache directory name: no
+  file count: 501
+
+RECOMMENDATION: Tier 3 - archive to cloud, then evict (but check first
+  whether this is a RECURRING regenerating cache, not a one-off)
+  reason: dormant (@N@ days), untracked, and shaped like a
+  many-small-files raw cache (501 files). If a pipeline
+  regenerates this on its own schedule, add it to
+  ~/.config/market-data/datasets.conf + cloud_backup.sh's
+  STATIC_SUBDIRS instead of a one-off archive-evict, so re-archival
+  stays automatic. Otherwise:
+    @SCRIPT@ archive-evict '@SANDBOX@/dormant_many'
+exit=0

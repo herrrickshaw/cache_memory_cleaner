@@ -1,0 +1,5 @@
+=== Archiving @SANDBOX@/dormant_small -> @SANDBOX@/staging/dormant_small-@DATE@.tar.zst ===
+[dry-run] tar -cf - -C '@SANDBOX@' 'dormant_small' | zstd -T0 -19 -o '@SANDBOX@/staging/dormant_small-@DATE@.tar.zst'
+[dry-run] would upload @SANDBOX@/staging/dormant_small-@DATE@.tar.zst to: fake:cache-archives
+[dry-run] would byte-verify each, then delete @SANDBOX@/dormant_small and @SANDBOX@/staging/dormant_small-@DATE@.tar.zst only if all verify
+exit=0
