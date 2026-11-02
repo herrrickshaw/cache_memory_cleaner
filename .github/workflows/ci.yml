@@ -1,0 +1,26 @@
+name: ci
+# Syntax check + characterisation smoke test (read-only / dry-run paths only).
+# Runs on macOS because the script and its recorded expectations use BSD
+# stat/ps/df; nothing outside a throw-away sandbox is touched.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: bash -n cache_memory_cleaner.sh tests/smoke.sh
+      - name: shellcheck (errors only)
+        run: |
+          brew install shellcheck >/dev/null
+          shellcheck -S error cache_memory_cleaner.sh tests/smoke.sh
+      - name: smoke test
+        run: tests/smoke.sh

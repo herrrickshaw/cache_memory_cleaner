@@ -134,6 +134,9 @@ run_case listarchives_none DRY_RUN=1 "ARCHIVE_LOG=$S/none.tsv" -- list-archives
 run_case listarchives_one  DRY_RUN=1 "ARCHIVE_LOG=$S/archive_log.tsv" -- list-archives
 run_case archive_noarg     DRY_RUN=1 -- archive-evict
 run_case compress_noarg    DRY_RUN=1 -- compress-local
+if command -v brew >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  run_case cleanpackages_dry DRY_RUN=1 -- clean-packages
+fi
 if command -v rclone >/dev/null 2>&1; then
   run_case archive_dry DRY_RUN=1 "ARCHIVE_STAGING=$S/staging" "ARCHIVE_LOG=$S/al.tsv" \
     CLEANER_REMOTES=fake:cache-archives -- archive-evict "$S/dormant_small"
