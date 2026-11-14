@@ -6,15 +6,27 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789439393.2010813,
-    "seen": 1789968634.652704,
-    "ast_hash": "824b11244329323933f328d3cabb8268",
+    "mtime": 1792914000.3238552,
+    "seen": 1792992635.944355,
+    "ast_hash": "bc5e87d7460ac3358517f321a01bf52f",
     "semantic_hash": ""
   },
   ".github/workflows/quality-gates.yml": {
     "mtime": 1789577602.3920796,
     "seen": 1789968634.652698,
     "ast_hash": "510f7e392c07f0574ba8a559ba2cdf12",
+    "semantic_hash": ""
+  },
+  "HOW_TO_USE_WITH_AI.md": {
+    "mtime": 1792914000.3232052,
+    "seen": 1792992635.944352,
+    "ast_hash": "3c6f38700030febba394de2152f7407c",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1792914000.329141,
+    "seen": 1792992635.9443579,
+    "ast_hash": "1c88ac97bd5c8579bc0a7bbccda3d562",
     "semantic_hash": ""
   }
 }

@@ -102,6 +102,23 @@ cmd_clean_caches() {
   [ -d "$HOME/.cache/uv" ] && run "rm -rf '$HOME/.cache/uv'"
   [ -d "$HOME/.cache/gem" ] && run "rm -rf '$HOME/.cache/gem'"
 
+  log "=== Claude.app's own Electron cache (found 2026-11-10 — never covered before; app rebuilds on demand) ==="
+  local claude_support="$HOME/Library/Application Support/Claude"
+  for d in "Cache" "Code Cache" "GPUCache" "GraphiteDawnCache" "DawnWebGPUCache" "DawnGraphiteCache" "Shared Dictionary"; do
+    p="$claude_support/$d"
+    [ -d "$p" ] && run "rm -rf '$p'/*"
+  done
+  # claude-code embeds a full copy per version under here; only the version the
+  # running desktop app currently points at is live — prune older ones.
+  if [ -d "$claude_support/claude-code" ]; then
+    local active_ver
+    active_ver=$(ps aux | grep -oE 'claude-code/[0-9.]+' | head -1 | cut -d/ -f2)
+    for vdir in "$claude_support/claude-code"/*/; do
+      v=$(basename "$vdir")
+      [ "$v" != "$active_ver" ] && run "rm -rf '$vdir'"
+    done
+  fi
+
   after=$(free_gb)
   log
   log "Free space: ${before}GB -> ${after}GB"
