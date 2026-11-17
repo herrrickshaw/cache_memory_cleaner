@@ -1,0 +1,16 @@
+=== Classifying: @SANDBOX@/repo_remote/tracked.txt ===
+  live process has it open (argv match): no
+  personal/scanned-document filename pattern: no
+  inside a vendor cloud-sync mirror (CloudStorage): no
+  git: root=@SANDBOX@/repo_remote tracked=1 ignored=0 has_remote=1
+  days since last file modified inside: @N@
+  looks like a Python venv: no
+  pure-cache directory name: no
+  file count: 1
+
+RECOMMENDATION: Tier 2 - already cloud-backed via GitHub, keep local
+  reason: git-tracked with a remote - it's already redundant. Do not
+  also duplicate the working tree to Dropbox/GDrive; that's wasted
+  space for zero extra safety. Deleting it locally only shows up as an
+  uncommitted change, it doesn't free space until committed.
+exit=0

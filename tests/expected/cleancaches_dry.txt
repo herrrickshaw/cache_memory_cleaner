@@ -1,0 +1,12 @@
+=== Browser caches (Library/Caches — safe, apps rebuild on demand) ===
+[dry-run] rm -rf '@SANDBOX@/home/Library/Caches/Google'
+=== Chrome's redownloadable on-device ML model caches ===
+[dry-run] rm -rf '@SANDBOX@/home/Library/Application Support/Google/Chrome/screen_ai'
+=== Chrome Service Worker + GPUCache across all profiles (not IndexedDB/Extensions) ===
+[dry-run] rm -rf '@SANDBOX@/home/Library/Application Support/Google/Chrome/Default/GPUCache'
+=== Package-manager caches ===
+[dry-run] rm -rf '@SANDBOX@/home/Library/Caches/pip'
+[dry-run] rm -rf '@SANDBOX@/home/.npm'
+
+Free space: @N@GB -> @N@GB
+exit=0

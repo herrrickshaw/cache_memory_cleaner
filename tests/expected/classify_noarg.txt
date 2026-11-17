@@ -1,0 +1,2 @@
+usage: @SCRIPT@ classify <path>
+exit=1

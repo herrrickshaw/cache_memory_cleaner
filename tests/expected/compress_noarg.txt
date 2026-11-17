@@ -1,0 +1,4 @@
+usage: @SCRIPT@ compress-local <path> [<path>...]
+  Applies transparent HFS/APFS compression (via afsctool) to each path.
+  Files stay fully readable/writable by any program — only disk usage shrinks.
+exit=1

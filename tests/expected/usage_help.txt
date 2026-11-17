@@ -1,0 +1,3 @@
+Usage: @SCRIPT@ {report|clean-caches|clean-packages|find-dormant [days]|git-gc [path]|archive-evict <path> [name]|list-archives|compress-local <path> [<path>...]|classify <path>|trim-vms|all}
+Set DRY_RUN=1 to preview without deleting anything.
+exit=1

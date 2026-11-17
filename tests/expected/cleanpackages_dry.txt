@@ -1,0 +1,6 @@
+=== brew: autoremove orphaned deps + cleanup old versions/cache ===
+[dry-run] brew autoremove
+[dry-run] brew cleanup -s
+=== npm: prune global cache ===
+[dry-run] npm cache clean --force
+exit=0

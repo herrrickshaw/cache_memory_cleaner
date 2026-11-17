@@ -2,6 +2,20 @@
 
 Guidance for Claude Code sessions working in this repository.
 
+## This repository
+
+- One script, `cache_memory_cleaner.sh` (bash 3.2-compatible: no associative arrays, no `mapfile`;
+  `set -uo pipefail`, deliberately no `-e`). One `cmd_*` function per subcommand, `sig_*` signal
+  functions + `classify_recommend` for the tier decision, `run`/`run_rm_rf`/`run_shown` for every
+  mutating command (honour `DRY_RUN=1`; no `eval`).
+- It deletes files. Never run `clean-caches`, `clean-packages`, `archive-evict`, `trim-vms` or `all`
+  against real paths while developing; test with `classify`, `--help`, and `DRY_RUN=1` in a temp dir.
+- Subcommand names, flags, exit codes, tier names and output text are a contract with scheduled jobs
+  on the owner's Mac. Run `tests/smoke.sh` after any change; re-record with `tests/smoke.sh --record`
+  only for an intentional output change, and say so in the commit.
+- 🔴 `CLEANER_REMOTES` must never point at a folder another job `rclone sync`s (see README,
+  "Limitations and known issues").
+
 <!-- source-fetch-toolkit:v1 (managed by ~/bin/add_source_fetch_section.py — edit there, not here) -->
 ## Source fetching for data collection & literature surveys
 

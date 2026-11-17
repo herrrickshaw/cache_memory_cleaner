@@ -1,0 +1,2 @@
+not a git repo: @SANDBOX@/recent
+exit=1
